@@ -1,0 +1,2 @@
+# Replace 'deploy' with the Linux SSH user used by Jenkins.
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/deploy-hello-ci

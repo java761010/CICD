@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Ubuntu 24.04 + distribution package tomcat10 lab example.
+INCOMING="/opt/deploy/incoming/hello-ci.war"
+RELEASE_DIR="/opt/deploy/releases"
+WEBAPPS="/var/lib/tomcat10/webapps"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+RELEASE="${RELEASE_DIR}/hello-ci-${TIMESTAMP}.war"
+
+[[ -f "$INCOMING" && ! -L "$INCOMING" && -s "$INCOMING" ]] || {
+  echo "WAR missing, empty or symlink" >&2; exit 1;
+}
+command -v unzip >/dev/null
+unzip -tq "$INCOMING" >/dev/null
+mkdir -p "$RELEASE_DIR"
+install -m 0644 "$INCOMING" "$RELEASE"
+
+# Simple lab deployment: restart Tomcat after copying the new WAR.
+# This causes downtime and is NOT a zero-downtime production deployment.
+systemctl stop tomcat10
+rm -rf "${WEBAPPS}/hello-ci"  # Fixed lab app only, never user-provided paths.
+install -m 0644 "$RELEASE" "${WEBAPPS}/hello-ci.war"
+systemctl start tomcat10
+
+for i in $(seq 1 30); do
+  if curl -fsS --max-time 3 http://127.0.0.1:8080/hello-ci/health | grep -q '^OK'; then
+    echo "Deployment OK: $RELEASE"
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "Health check failed; inspect journalctl -u tomcat10 and catalina logs" >&2
+exit 1
